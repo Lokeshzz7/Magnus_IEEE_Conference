@@ -111,7 +111,7 @@ const App = () => {
       reader.onloadend = async () => {
         const base64PDF = reader.result.split(',')[1];
         const pdfFilename = `pdfs/${Date.now()}_${pdfFile.name}`;
-        setUploadProgress('Uploading PDF to GitHub...');
+        setUploadProgress('Uploading PDF...');
         const pdfUploaded = await uploadToGitHub(pdfFilename, base64PDF, `Upload paper: ${paperData.title}`);
         if (pdfUploaded) {
           const newPaper = {
@@ -157,7 +157,7 @@ const App = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setCurrentPage('home')}>
               <BookOpen className="w-6 h-6 text-gray-900" />
-              <span className="text-xl font-semibold text-gray-900">IEEE Symposium</span>
+              <span className="text-xl font-semibold text-gray-900">Magnus CIT</span>
             </div>
             <div className="flex items-center space-x-3">
               {isAuthenticated ? (
@@ -273,7 +273,7 @@ const PaperPage = ({ paper, setCurrentPage, isAuthenticated, handleDeletePaper }
             </div>
             <div className="space-y-3 pt-4">
               <a href={paper.pdfUrl} download className="w-full flex items-center justify-center space-x-2 px-5 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition shadow-sm font-medium"><Download className="w-5 h-5" /><span>Download PDF</span></a>
-              <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center space-x-2 px-5 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition border border-gray-300 font-medium"><Eye className="w-5 h-5" /><span>Open in New Tab</span></a>
+              <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(paper.pdfUrl)}&embedded=true`} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center space-x-2 px-5 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition border border-gray-300 font-medium"><Eye className="w-5 h-5" /><span>Open in New Tab</span></a>
             </div>
           </div>
         </div>
