@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Upload, LogOut, Eye, User, Calendar, BookOpen } from 'lucide-react';
+import { FileText, Download, Upload, LogOut, Eye, User, Calendar, BookOpen, Loader2 } from 'lucide-react';
 
 const GITHUB_CONFIG = {
   owner: 'Lokeshzz7',
@@ -14,12 +14,14 @@ const ADMIN_CREDENTIALS = {
   password: 'admin@123'
 };
 
+
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [papers, setPapers] = useState([]);
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -40,7 +42,9 @@ const App = () => {
 
       if (response.ok) {
         const data = await response.json();
-        const content = JSON.parse(atob(data.content));
+        // Fix for special characters when reading
+        const decodedContent = decodeURIComponent(escape(atob(data.content)));
+        const content = JSON.parse(decodedContent);
         setPapers(content.papers || []);
       } else {
         setPapers([]);
@@ -106,11 +110,19 @@ const App = () => {
 
   const handleUploadPaper = async (paperData, pdfFile) => {
     setLoading(true);
+    console.log('🚀 Starting upload process...');
+    
     try {
+      setUploadProgress('Reading PDF file...');
+      console.log('📖 Reading PDF file...');
+      
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64PDF = reader.result.split(',')[1];
         const pdfFilename = `pdfs/${Date.now()}_${pdfFile.name}`;
+        
+        setUploadProgress('Uploading PDF to GitHub... (This may take a minute)');
+        console.log('⬆️ Uploading PDF to GitHub...');
         
         const pdfUploaded = await uploadToGitHub(
           pdfFilename,
@@ -119,16 +131,23 @@ const App = () => {
         );
 
         if (pdfUploaded) {
+          console.log('✅ PDF uploaded successfully!');
           const newPaper = {
             id: Date.now().toString(),
             ...paperData,
-            pdfUrl: `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${GITHUB_CONFIG.branch}/${pdfFilename}`,
+            pdfUrl: `https://github.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/raw/${GITHUB_CONFIG.branch}/${pdfFilename}`,
             uploadDate: new Date().toISOString()
           };
 
           const updatedPapers = [...papers, newPaper];
-          const papersContent = btoa(JSON.stringify({ papers: updatedPapers }, null, 2));
+          
+          // Fix for special characters - encode to base64 properly
+          const jsonString = JSON.stringify({ papers: updatedPapers }, null, 2);
+          const papersContent = btoa(unescape(encodeURIComponent(jsonString)));
 
+          setUploadProgress('Updating paper metadata...');
+          console.log('📝 Updating metadata...');
+          
           const metadataUploaded = await uploadToGitHub(
             'papers.json',
             papersContent,
@@ -136,21 +155,27 @@ const App = () => {
           );
 
           if (metadataUploaded) {
+            console.log('✅ Upload complete!');
             setPapers(updatedPapers);
-            alert('Paper uploaded successfully!');
+            setUploadProgress('Upload complete! ✨');
+            alert('Paper uploaded successfully! 🎉');
+            setLoading(false);
             setCurrentPage('home');
           } else {
+            console.error('❌ Failed to update metadata');
             alert('Failed to update metadata');
+            setLoading(false);
           }
         } else {
+          console.error('❌ Failed to upload PDF');
           alert('Failed to upload PDF');
+          setLoading(false);
         }
       };
       reader.readAsDataURL(pdfFile);
     } catch (error) {
       console.error('Upload error:', error);
       alert('Upload failed: ' + error.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -163,7 +188,9 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <nav className="bg-white shadow-lg sticky top-0 z-50">
+      {loading && <LoadingOverlay progress={uploadProgress} />}
+      
+      <nav className="bg-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setCurrentPage('home')}>
@@ -213,6 +240,32 @@ const App = () => {
     </div>
   );
 };
+
+const LoadingOverlay = ({ progress }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm">
+    <div className="bg-white rounded-3xl p-10 max-w-md w-full mx-4 shadow-2xl transform scale-100 animate-pulse">
+      <div className="flex flex-col items-center space-y-6">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-blue-600"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <h3 className="text-3xl font-bold text-gray-900">Uploading Paper</h3>
+          <p className="text-lg text-gray-600 font-medium">{progress}</p>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
+          <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 h-4 rounded-full animate-pulse"></div>
+        </div>
+        <div className="flex items-center space-x-2 text-gray-500">
+          <div className="animate-bounce">⏳</div>
+          <p className="text-sm">Please wait, uploading to GitHub...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 const HomePage = ({ papers, setSelectedPaper, setCurrentPage, searchQuery, setSearchQuery }) => (
   <div className="space-y-8">
@@ -265,7 +318,7 @@ const HomePage = ({ papers, setSelectedPaper, setCurrentPage, searchQuery, setSe
                 </div>
                 <div className="flex items-center space-x-2 text-blue-600 font-semibold">
                   <Eye className="w-4 h-4" />
-                  <span>View Paper</span>
+                  <span>Read Paper</span>
                 </div>
               </div>
             </div>
@@ -312,7 +365,7 @@ const PaperPage = ({ paper, setCurrentPage }) => (
             className="flex-1 flex items-center justify-center space-x-2 px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg"
           >
             <Eye className="w-5 h-5" />
-            <span className="font-semibold">View Paper</span>
+            <span className="font-semibold">Open in New Tab</span>
           </a>
           <a
             href={paper.pdfUrl}
@@ -325,11 +378,17 @@ const PaperPage = ({ paper, setCurrentPage }) => (
         </div>
 
         <div className="mt-8 border-t pt-6">
-          <iframe
-            src={paper.pdfUrl}
-            className="w-full h-[800px] border-2 border-gray-200 rounded-lg"
-            title="PDF Viewer"
-          />
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">📄 Read Paper Below</h2>
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 shadow-inner">
+            <iframe
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(paper.pdfUrl)}&embedded=true`}
+              className="w-full h-[900px] border-4 border-white rounded-lg shadow-2xl bg-white"
+              title="PDF Viewer"
+            />
+          </div>
+          <p className="text-sm text-gray-500 mt-4 text-center bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+            💡 <strong>Tip:</strong> If PDF doesn't display here, click "Open in New Tab" button above to view it separately
+          </p>
         </div>
       </div>
     </div>
@@ -409,9 +468,10 @@ const UploadPage = ({ handleUploadPaper, loading }) => {
 
   const onSubmit = () => {
     if (!title || !authors || !abstract || !pdfFile) {
-      alert('Please fill all fields');
+      alert('Please fill all fields and select a PDF file');
       return;
     }
+    console.log('🎯 Form submitted, starting upload...');
     handleUploadPaper({ title, authors, abstract }, pdfFile);
   };
 
@@ -433,7 +493,9 @@ const UploadPage = ({ handleUploadPaper, loading }) => {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={loading}
+              placeholder="Enter the full paper title"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -444,7 +506,8 @@ const UploadPage = ({ handleUploadPaper, loading }) => {
               value={authors}
               onChange={(e) => setAuthors(e.target.value)}
               placeholder="John Doe, Jane Smith, et al."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={loading}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -454,7 +517,9 @@ const UploadPage = ({ handleUploadPaper, loading }) => {
               value={abstract}
               onChange={(e) => setAbstract(e.target.value)}
               rows={6}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={loading}
+              placeholder="Enter the paper abstract..."
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -464,17 +529,33 @@ const UploadPage = ({ handleUploadPaper, loading }) => {
               type="file"
               accept=".pdf"
               onChange={(e) => setPdfFile(e.target.files[0])}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={loading}
+              className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed hover:border-blue-400 transition"
             />
+            {pdfFile && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700 font-medium flex items-center space-x-2">
+                  <span>✅</span>
+                  <span>Selected: {pdfFile.name}</span>
+                  <span className="text-green-600">({(pdfFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                </p>
+              </div>
+            )}
           </div>
 
           <button
             onClick={onSubmit}
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 transition font-semibold shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-semibold shadow-lg disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-lg"
           >
-            {loading ? 'Uploading...' : 'Upload Paper'}
+            {loading ? '⏳ Uploading...' : '🚀 Upload Paper'}
           </button>
+          
+          {loading && (
+            <div className="text-center text-sm text-gray-500 animate-pulse">
+              Do not close this window while uploading...
+            </div>
+          )}
         </div>
       </div>
     </div>
